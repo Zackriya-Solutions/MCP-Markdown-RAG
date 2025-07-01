@@ -1,6 +1,11 @@
-def main():
-    print("Hello from mcp-markdown-rag!")
+from mcp.server.fastmcp import FastMCP
 
+mcp = FastMCP("mc-markdown-rag")
+
+
+@mcp.tool()
+def echo(text: str) -> str:
+    return text
 
 if __name__ == "__main__":
-    main()
+    mcp.run()
