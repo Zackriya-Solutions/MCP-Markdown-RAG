@@ -80,7 +80,7 @@ async def index_documents(directory: Optional[str] = None):
 @mcp.tool()
 async def search_documents(query: str, k: int = 5):
     """
-    Search documents for semantic search based on query
+    Search for semantically relevant documents based on query
 
     Args:
         query (str): Query to search for
