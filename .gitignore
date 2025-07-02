@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Ruff
+.ruff_cache
+
+# Data
+milvus/
+demo/
