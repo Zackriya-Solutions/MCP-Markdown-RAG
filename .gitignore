@@ -13,5 +13,5 @@ wheels/
 .ruff_cache
 
 # Data
-milvus/
+.db/
 demo/

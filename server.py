@@ -1,19 +1,27 @@
-from mcp.server.fastmcp import FastMCP
-from llama_index.core import SimpleDirectoryReader
+import os
 from typing import Optional
+
+from llama_index.core import SimpleDirectoryReader
 from llama_index.core.node_parser import MarkdownNodeParser
 from llama_index.core.text_splitter import TokenTextSplitter
+from mcp.server.fastmcp import FastMCP
 from pymilvus import MilvusClient, model
-from utils import Entity, SearchResult, LOCAL_MILVUS_PATH, COLLECTION_NAME
-import os
 
+from utils import (
+    COLLECTION_NAME,
+    Entity,
+    INDEX_DATA_PATH,
+    SearchResult,
+    get_changed_files,
+    update_tracking_file,
+)
 
 mcp = FastMCP("mcp-markdown-rag")
 
 
-if not os.path.exists(LOCAL_MILVUS_PATH):
-    os.makedirs(LOCAL_MILVUS_PATH)
-milvus_client = MilvusClient(LOCAL_MILVUS_PATH + "/milvus_markdown.db")
+if not os.path.exists(INDEX_DATA_PATH):
+    os.makedirs(INDEX_DATA_PATH)
+milvus_client = MilvusClient(os.path.join(INDEX_DATA_PATH, "milvus_markdown.db"))
 embedding_fn = model.DefaultEmbeddingFunction()
 
 
@@ -29,32 +37,61 @@ def search(query: str, k: int) -> list[list[SearchResult]]:
 
 
 @mcp.tool()
-async def index_documents(directory: Optional[str] = None):
+async def index_documents(directory: Optional[str] = "./", force_reindex: bool = False):
     """
-    Index documents for semantic search
+    Index Documents(markdown files) for semantic search using Milvus.
+
+    Reads `.md` files from a directory, splits them by heading and size,
+    embeds them into 768D vectors, and stores them with metadata in Milvus.
+    Supports both full and incremental indexing.
 
     Args:
-        directory (str, optional): Directory containing markdown files to index.
-            Defaults to current directory if not provided.
+        directory (str, optional): Path to folder with Markdown files. Defaults to current directory.
+        force_reindex (bool, optional): If True, clears and fully rebuilds the index.
 
-    Processing:
-    - Creates Milvus collection with 768 dimensions
-    - Reads and processes markdown files
-    - Splits content by headings and chunks large content
-    - Converts to vector embeddings
-    - Stores vectors with metadata
+    Returns:
+        dict: Summary with file count, chunk count, and indexing status.
 
-    Note: Automatically handles document chunking and embedding
+    Supports change-based detection to avoid reindexing unchanged files.
     """
-    if milvus_client.has_collection(COLLECTION_NAME):
-        milvus_client.drop_collection(COLLECTION_NAME)
-    milvus_client.create_collection(COLLECTION_NAME, dimension=768, auto_id=True)
 
-    # Read and process markdown files
-    documents = SimpleDirectoryReader(
-        directory or "./", required_exts=[".md"]
-    ).load_data()
+    if force_reindex:
+        if milvus_client.has_collection(COLLECTION_NAME):
+            milvus_client.drop_collection(COLLECTION_NAME)
+        milvus_client.create_collection(COLLECTION_NAME, dimension=768, auto_id=True)
 
+        # Read and process markdown files
+        documents = SimpleDirectoryReader(directory, required_exts=[".md"]).load_data()
+        processed_files = [doc.metadata["file_path"] for doc in documents]
+
+    else:
+        changed_files = get_changed_files(directory)
+
+        if not changed_files:
+            return {"message": "Already up to date, Nothing to index!"}
+        # If not collection exists create a new one
+        if not milvus_client.has_collection(COLLECTION_NAME):
+            milvus_client.create_collection(
+                COLLECTION_NAME, dimension=768, auto_id=True
+            )
+        # Needs to delete the old chunks related to changed files
+        for file_path in changed_files:
+            try:
+                milvus_client.delete(
+                    collection_name=COLLECTION_NAME, filter=f"path == '{file_path}'"
+                )
+            except Exception as e:
+                print(e)
+
+        # Load only changed files to index
+        documents = SimpleDirectoryReader(
+            input_files=changed_files, required_exts=[".md"]
+        ).load_data()
+        # Update tracking file
+        processed_files = changed_files
+
+    if not documents:
+        return {"message": "Nothing to index!"}
     # Convert to nodes based on markdown structure, then split larger nodes into chunks
     nodes = MarkdownNodeParser().get_nodes_from_documents(documents)
     chunked_nodes = TokenTextSplitter(
@@ -74,7 +111,17 @@ async def index_documents(directory: Optional[str] = None):
         for i in range(len(vectors))
     ]
     res = milvus_client.insert(collection_name=COLLECTION_NAME, data=data)
-    return {**res, "added_files": [doc.metadata["file_name"] for doc in documents]}
+
+    # Update tracking file
+    update_tracking_file(processed_files)
+
+    return {
+        **res,
+        "message": "Full reindex" if force_reindex else "Incremental update",
+        "processed_files": len(processed_files),
+        "total_chunks": len(chunked_nodes),
+        "files": [os.path.basename(f) for f in processed_files],
+    }
 
 
 @mcp.tool()

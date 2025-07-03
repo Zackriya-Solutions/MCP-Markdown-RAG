@@ -26,8 +26,12 @@ The server operates in two main phases, exposing its functionality through MCP t
     - The `index_documents` tool is called with a path to your markdown files.
     - The server reads the documents, splits them into logical chunks (e.g., by headings), and converts each chunk into a vector embedding.
     - These embeddings, along with their metadata (original text, file path), are stored in a local Milvus vector database.
+    - You can run it in two modes:
+      - **Full Reindex** (force_reindex=True): Clears and rebuilds the entire index from scratch.
+      - **Incremental Update** (force_reindex=False, default): Automatically detects and re-indexes only changed files by comparing them against a tracking log. Deleted or modified chunks are pruned and replaced to keep the index up-to-date.
 
 2.  **Searching**:
+
     - When you ask a question in a host application, it uses the `search` tool.
     - The server converts your query into a vector embedding.
     - It then performs a similarity search against the Milvus database to find the most semantically relevant document chunks.
@@ -39,13 +43,19 @@ The server operates in two main phases, exposing its functionality through MCP t
 
 ## 🛠️ Available Tools
 
-- `index_documents` - Processes all markdown documents in a directory, creates vector embeddings, and stores them in the Milvus vector database.
+- `index_documents`
 
-  - `directory_path` (string, required): The absolute path to the directory of documents to be indexed.
+  - **Description**: Indexes Markdown documents for semantic search. Converts each file into structured vector chunks and inserts them into the Milvus database.
+  - **Incremental Indexing**: Automatically reindexes only changed files unless force_reindex=True is passed.
+  - **Arguments**:
+    - `directory` (string, optional): The path to the folder containing .md files. Defaults to current directory.
+    - `force_reindex` (boolean, optional): If True, clears and rebuilds the full index. Defaults to False.
 
-- `search` - Searches the vector database for semantically relevant document chunks based on a query.
-  - `query` (string, required): The question or topic you want to search for.
-  - `limit` (integer, optional): The maximum number of results to return.
+- `search`
+  - **Description**: Searches the indexed documents using semantic similarity.
+  - **Arguments**:
+    - `query` (string, required): Your natural language query.
+    - `limit` (integer, optional): Max number of chunks to return (default is usually 5–10).
 
 ## 🚀 Installation & Setup
 
@@ -87,7 +97,7 @@ Configure your MCP host application (e.g., Windsurf, Claude.app) to use the serv
 
 We are actively working on improving the server. Future plans include:
 
-- **Performance Optimization**: Improve indexing by encoding inputs in batches, which should better manage CPU usage. Additionally, we will switch to change-based indexing, which will only index new or modified files.
+- **Performance Optimization**: Improve indexing by encoding inputs in batches, which should better manage CPU usage.
 - **Flexible Embedding Models**: Add support for other embedding models, such as the `BGEM3-large` model for potentially higher accuracy.
 - **Obsidian Plugin**: Explore creating a dedicated Obsidian plugin for a fully integrated experience.
 
