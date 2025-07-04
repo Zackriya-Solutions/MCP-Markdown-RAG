@@ -11,7 +11,9 @@ from utils import (
     Entity,
     INDEX_DATA_PATH,
     SearchResult,
+    ensure_collection,
     get_changed_files,
+    list_md_files,
     update_tracking_file,
 )
 
@@ -39,6 +41,7 @@ def search(query: str, k: int) -> list[list[SearchResult]]:
 async def index_documents(
     current_working_directory: str,
     directory: str = "",
+    recursive: bool = False,
     force_reindex: bool = False,
 ):
     """
@@ -51,6 +54,7 @@ async def index_documents(
     Args:
         current_working_directory (str): Base directory used to resolve the full path to the Markdown folder.
         directory (str, optional): Optional relative path from the current working directory to the folder containing Markdown files.
+        recursive (bool, optional): Set to True to index all subdirectories.
         force_reindex (bool, optional): Set to True to clear and rebuild the entire index, ignoring any cached data.
 
     Returns:
@@ -58,30 +62,29 @@ async def index_documents(
 
     Uses change-based detection to skip unchanged files.
     """
+    target_path = os.path.join(current_working_directory, directory)
+
+    if not os.path.exists(target_path):
+        return {"message": "Directory does not exist!"}
 
     if force_reindex:
         if milvus_client.has_collection(COLLECTION_NAME):
             milvus_client.drop_collection(COLLECTION_NAME)
-        milvus_client.create_collection(COLLECTION_NAME, dimension=768, auto_id=True)
+        ensure_collection(milvus_client)
 
-        # Read and process markdown files
+        all_files = list_md_files(target_path, recursive=recursive)
         documents = SimpleDirectoryReader(
-            os.path.join(current_working_directory, directory), required_exts=[".md"]
+            input_files=all_files, required_exts=[".md"]
         ).load_data()
         processed_files = [doc.metadata["file_path"] for doc in documents]
 
     else:
-        changed_files = get_changed_files(
-            os.path.join(current_working_directory, directory)
-        )
+        changed_files = get_changed_files(target_path, recursive=recursive)
 
         if not changed_files:
             return {"message": "Already up to date, Nothing to index!"}
         # If not collection exists create a new one
-        if not milvus_client.has_collection(COLLECTION_NAME):
-            milvus_client.create_collection(
-                COLLECTION_NAME, dimension=768, auto_id=True
-            )
+        ensure_collection(milvus_client)
         # Needs to delete the old chunks related to changed files
         for file_path in changed_files:
             try:
@@ -98,25 +101,24 @@ async def index_documents(
         # Update tracking file
         processed_files = changed_files
 
-    if not documents:
-        return {"message": "Nothing to index!"}
     # Convert to nodes based on markdown structure, then split larger nodes into chunks
     nodes = MarkdownNodeParser().get_nodes_from_documents(documents)
     chunked_nodes = TokenTextSplitter(
         chunk_size=512, chunk_overlap=100
     ).get_nodes_from_documents(nodes)
+    chunked_nodes = [node for node in chunked_nodes if node.text.strip()]
 
     # Extract text from nodes and embed
-    docs = [node.text for node in chunked_nodes]
-    vectors = embedding_fn.encode_documents(docs)
+    texts = [node.text for node in chunked_nodes]
+    vectors = embedding_fn.encode_documents(texts)
     data = [
         {
-            "vector": vectors[i],
-            "text": docs[i],
-            "filename": chunked_nodes[i].metadata["file_name"],
-            "path": chunked_nodes[i].metadata["file_path"],
+            "vector": vector,
+            "text": node.text,
+            "filename": node.metadata["file_name"],
+            "path": node.metadata["file_path"],
         }
-        for i in range(len(vectors))
+        for vector, node in zip(vectors, chunked_nodes)
     ]
     res = milvus_client.insert(collection_name=COLLECTION_NAME, data=data)
 

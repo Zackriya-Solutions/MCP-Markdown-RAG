@@ -3,6 +3,7 @@ import json
 import os
 
 from pydantic import BaseModel
+from pymilvus import MilvusClient
 
 INDEX_DATA_PATH = "./.db"
 INDEX_TRACKING_FILE = "index_tracking.json"
@@ -52,24 +53,45 @@ def update_tracking_file(processed_files):
     save_tracking_file(tracking_data)
 
 
-def get_changed_files(directory: str) -> list[str]:
+def list_md_files(base_dir: str, recursive: bool = False) -> list[str]:
+    md_files = []
+    if recursive:
+        for root, dirs, files in os.walk(base_dir):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for file in files:
+                if file.endswith(".md"):
+                    md_files.append(os.path.join(root, file))
+    else:
+        for file in os.listdir(base_dir):
+            if file.endswith(".md"):
+                md_files.append(os.path.join(base_dir, file))
+    return md_files
+
+
+def get_changed_files(
+    directory: str,
+    recursive: bool = False,
+) -> list[str]:
     """
     Get list of changed file's paths in the directory
     """
     tracking_data = load_tracking_file()
     changed_files = []
-    for file in os.listdir(directory):
-        if file.endswith(".md"):
-            file_path = os.path.join(directory, file)
-            try:
-                current_hash, current_modified_time = get_file_info(file_path)
-            except (FileNotFoundError, PermissionError):
-                continue
-            # If file is not in tracking data, it is new
-            if file_path not in tracking_data:
-                changed_files.append(file_path)
-            else:
-                stored_hash, stored_time = tracking_data[file_path]
-                if current_hash != stored_hash or current_modified_time != stored_time:
-                    changed_files.append(file_path)
+    md_files = list_md_files(directory, recursive)
+    for file_path in md_files:
+        if file_path not in tracking_data:
+            changed_files.append(file_path)
+            continue
+        try:
+            current_hash, current_modified_time = get_file_info(file_path)
+        except (FileNotFoundError, PermissionError):
+            continue
+        stored_hash, stored_time = tracking_data[file_path]
+        if current_hash != stored_hash or current_modified_time != stored_time:
+            changed_files.append(file_path)
     return changed_files
+
+
+def ensure_collection(milvus_client: MilvusClient):
+    if not milvus_client.has_collection(COLLECTION_NAME):
+        milvus_client.create_collection(COLLECTION_NAME, dimension=768, auto_id=True)
