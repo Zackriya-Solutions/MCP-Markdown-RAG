@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 from llama_index.core import SimpleDirectoryReader
 from llama_index.core.node_parser import MarkdownNodeParser
@@ -37,22 +36,27 @@ def search(query: str, k: int) -> list[list[SearchResult]]:
 
 
 @mcp.tool()
-async def index_documents(directory: Optional[str] = "./", force_reindex: bool = False):
+async def index_documents(
+    current_working_directory: str,
+    directory: str = "",
+    force_reindex: bool = False,
+):
     """
-    Index Documents(markdown files) for semantic search using Milvus.
+    Index Markdown files for semantic search using Milvus.
 
-    Reads `.md` files from a directory, splits them by heading and size,
-    embeds them into 768D vectors, and stores them with metadata in Milvus.
-    Supports both full and incremental indexing.
+    Reads `.md` files from a directory (joined with current working directory),
+    splits them by heading and size, embeds them into 768D vectors,
+    and stores them with metadata in Milvus. Supports full and incremental indexing.
 
     Args:
-        directory (str, optional): Path to folder with Markdown files. Defaults to current directory.
-        force_reindex (bool, optional): If True, clears and fully rebuilds the index.
+        current_working_directory (str): Base directory used to resolve the full path to the Markdown folder.
+        directory (str, optional): Optional relative path from the current working directory to the folder containing Markdown files.
+        force_reindex (bool, optional): Set to True to clear and rebuild the entire index, ignoring any cached data.
 
     Returns:
         dict: Summary with file count, chunk count, and indexing status.
 
-    Supports change-based detection to avoid reindexing unchanged files.
+    Uses change-based detection to skip unchanged files.
     """
 
     if force_reindex:
@@ -61,11 +65,15 @@ async def index_documents(directory: Optional[str] = "./", force_reindex: bool =
         milvus_client.create_collection(COLLECTION_NAME, dimension=768, auto_id=True)
 
         # Read and process markdown files
-        documents = SimpleDirectoryReader(directory, required_exts=[".md"]).load_data()
+        documents = SimpleDirectoryReader(
+            os.path.join(current_working_directory, directory), required_exts=[".md"]
+        ).load_data()
         processed_files = [doc.metadata["file_path"] for doc in documents]
 
     else:
-        changed_files = get_changed_files(directory)
+        changed_files = get_changed_files(
+            os.path.join(current_working_directory, directory)
+        )
 
         if not changed_files:
             return {"message": "Already up to date, Nothing to index!"}
