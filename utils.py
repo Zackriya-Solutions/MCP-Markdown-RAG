@@ -42,8 +42,11 @@ def get_file_info(file_path):
     return file_hash, modified_time
 
 
-def update_tracking_file(processed_files):
+def update_tracking_file(processed_files: list[str], is_clear: bool = False):
     tracking_data = load_tracking_file()
+    if is_clear:
+        save_tracking_file({})
+        return
     for file_path in processed_files:
         try:
             tracking_data[file_path] = get_file_info(file_path)
@@ -85,6 +88,7 @@ def get_changed_files(
         try:
             current_hash, current_modified_time = get_file_info(file_path)
         except (FileNotFoundError, PermissionError):
+            tracking_data.pop(file_path, None)
             continue
         stored_hash, stored_time = tracking_data[file_path]
         if current_hash != stored_hash or current_modified_time != stored_time:

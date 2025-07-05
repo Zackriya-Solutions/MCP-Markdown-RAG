@@ -156,5 +156,16 @@ async def search_documents(query: str, k: int = 5):
     )  # Iterate through the relevent docs and append the text
 
 
+@mcp.tool()
+async def clear_index():
+    """
+    Clear the vector database's collection and reset the tracking file
+    """
+    ensure_collection(milvus_client)
+    res = milvus_client.delete(collection_name=COLLECTION_NAME, filter="id >= 0")
+    update_tracking_file([], is_clear=True)
+    return res
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
