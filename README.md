@@ -29,7 +29,7 @@ The server operates in two main phases, exposing its functionality through MCP t
     - You can run it in two modes:
       - **Full Reindex** (force_reindex=True): Clears and rebuilds the entire index from scratch.
       - **Incremental Update** (force_reindex=False, default): Automatically detects and re-indexes only changed files by comparing them against a tracking log. Deleted or modified chunks are pruned and replaced to keep the index up-to-date.
-      - **Recursive Indexing** (recursive=True, default): Recursively indexes all subdirectories.
+      - **Recursive Indexing** (recursive=False, default): Recursively indexes all subdirectories.
 
 2.  **Searching**:
 
@@ -51,7 +51,7 @@ The server operates in two main phases, exposing its functionality through MCP t
   - **Arguments**:
     - `directory` (string, optional): The path to the folder containing .md files. Defaults to current directory.
     - `force_reindex` (boolean, optional): If True, clears and rebuilds the full index. Defaults to False.
-    - `recursive` (boolean, optional): If True, recursively indexes all subdirectories. Defaults to True.
+    - `recursive` (boolean, optional): If True, recursively indexes all subdirectories. Defaults to False.
 
 - `search`
   - **Description**: Searches the indexed documents using semantic similarity.
