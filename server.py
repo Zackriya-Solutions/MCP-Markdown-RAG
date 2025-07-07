@@ -1,9 +1,10 @@
 import os
 
+from fastmcp import FastMCP
 from llama_index.core import SimpleDirectoryReader
 from llama_index.core.node_parser import MarkdownNodeParser
 from llama_index.core.text_splitter import TokenTextSplitter
-from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 from pymilvus import MilvusClient, model
 
 from utils import (
@@ -17,7 +18,13 @@ from utils import (
     update_tracking_file,
 )
 
-mcp = FastMCP("mcp-markdown-rag")
+mcp = FastMCP(
+    "mcp-markdown-rag",
+    instructions="""This MCP server provides semantic search capabilities over markdown files using 
+    vector embeddings and Milvus database. It enables you to index markdown documents and perform 
+    intelligent searches to find relevant content based on semantic similarity rather than just 
+    keyword matching.""",
+)
 
 
 if not os.path.exists(INDEX_DATA_PATH):
@@ -37,31 +44,18 @@ def search(query: str, k: int) -> list[list[SearchResult]]:
     return res
 
 
-@mcp.tool()
+@mcp.tool(
+    name="index_documents",
+    description="Index Markdown files for semantic search using Milvus.",
+    tags={"index", "vectorize", "store"},
+)
 async def index_documents(
-    current_working_directory: str,
-    directory: str = "",
-    recursive: bool = False,
-    force_reindex: bool = False,
+    current_working_directory: str = Field(description="Current working directory"),
+    directory: str = Field("", description="Directory to index"),
+    recursive: bool = Field(False, description="Recursively index subdirectories"),
+    force_reindex: bool = Field(False, description="Force reindex"),
 ):
-    """
-    Index Markdown files for semantic search using Milvus.
-
-    Reads `.md` files from a directory (joined with current working directory),
-    splits them by heading and size, embeds them into 768D vectors,
-    and stores them with metadata in Milvus. Supports full and incremental indexing.
-
-    Args:
-        current_working_directory (str): Base directory used to resolve the full path to the Markdown folder.
-        directory (str, optional): Optional relative path from the current working directory to the folder containing Markdown files.
-        recursive (bool, optional): Set to True to index all subdirectories.
-        force_reindex (bool, optional): Set to True to clear and rebuild the entire index, ignoring any cached data.
-
-    Returns:
-        dict: Summary with file count, chunk count, and indexing status.
-
-    Uses change-based detection to skip unchanged files.
-    """
+    # TODO: Implement Client Elicitation when it is available in Popular clients
     target_path = os.path.join(current_working_directory, directory)
 
     if not os.path.exists(target_path):
@@ -91,8 +85,8 @@ async def index_documents(
                 milvus_client.delete(
                     collection_name=COLLECTION_NAME, filter=f"path == '{file_path}'"
                 )
-            except Exception as e:
-                print(e)
+            except Exception:
+                continue
 
         # Load only changed files to index
         documents = SimpleDirectoryReader(
@@ -134,18 +128,15 @@ async def index_documents(
     }
 
 
-@mcp.tool()
-async def search_documents(query: str, k: int = 5):
-    """
-    Search for semantically relevant documents based on query
-
-    Args:
-        query (str): Query to search for
-        k (int, optional): Number of documents to return. Defaults to 5.
-
-    Returns:
-        list: List of documents similar to query
-    """
+@mcp.tool(
+    name="search_documents",
+    description="Search for semantically relevant documents based on query",
+    tags={"search", "query"},
+)
+async def search_documents(
+    query: str = Field(description="Query to search for"),
+    k: int = Field(5, description="Number of documents to return"),
+):
     results = search(query, k=k)
 
     return "\n---\n".join(
@@ -156,11 +147,12 @@ async def search_documents(query: str, k: int = 5):
     )  # Iterate through the relevent docs and append the text
 
 
-@mcp.tool()
+@mcp.tool(
+    name="clear_index",
+    description="Clear the vector database's collection and reset the tracking file",
+    tags={"clear", "reset"},
+)
 async def clear_index():
-    """
-    Clear the vector database's collection and reset the tracking file
-    """
     ensure_collection(milvus_client)
     res = milvus_client.delete(collection_name=COLLECTION_NAME, filter="id >= 0")
     update_tracking_file([], is_clear=True)

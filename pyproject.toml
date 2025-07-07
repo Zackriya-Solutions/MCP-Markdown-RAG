@@ -1,11 +1,11 @@
 [project]
 name = "mcp-markdown-rag"
 version = "0.1.0"
-description = "Add your description here"
+description = "Markdown based RAG system"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "fastmcp>=2.10.2",
     "llama-index>=0.12.45",
-    "mcp[cli]>=1.10.1",
     "pymilvus[model]>=2.5.11",
 ]

@@ -97,5 +97,6 @@ def get_changed_files(
 
 
 def ensure_collection(milvus_client: MilvusClient):
-    if not milvus_client.has_collection(COLLECTION_NAME):
-        milvus_client.create_collection(COLLECTION_NAME, dimension=768, auto_id=True)
+    if milvus_client.has_collection(COLLECTION_NAME):
+        return
+    milvus_client.create_collection(COLLECTION_NAME, dimension=768, auto_id=True)
