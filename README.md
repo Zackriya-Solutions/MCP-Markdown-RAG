@@ -1,5 +1,17 @@
 <div align="center">
-<h1>MCP-Markdown-RAG</h1>
+  <img src="docs/banner.png" alt="MCP-Markdown-RAG" width="800" style="border-radius:10px;"/>
+  <h1>MCP-Markdown-RAG</h1>
+  <p>
+  <img alt="GitHub forks" src="https://img.shields.io/github/forks/Zackriya-Solutions/MCP-Markdown-RAG"/>
+  <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/Zackriya-Solutions/MCP-Markdown-RAG">
+  <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/Zackriya-Solutions/MCP-Markdown-RAG">
+</p>
+<p>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-null-green" alt="License" />
+  </a>
+  <img src="https://img.shields.io/badge/MCP-Server-blue"/>
+</p>
 </div>
 
 A **Model Context Protocol (MCP)** server that provides a **local-first RAG engine** for your markdown documents. This server uses a file-based Milvus vector database to index your notes, enabling Large Language Models (LLMs) to perform semantic search and retrieve relevant content from your local files.
